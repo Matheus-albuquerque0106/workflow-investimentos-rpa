@@ -1,0 +1,171 @@
+{
+  "name": "Assistente de Investimentos com IA e RPA",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "clientes",
+        "options": {}
+      },
+      "id": "webhook-clientes-id",
+      "name": "Webhook Clientes (RPA Trigger)",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        200,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://raw.githubusercontent.com/digitalinnovationone/dio-lab-assistente-investimentos-rpa-n8n/main/docs/data.csv",
+        "options": {}
+      },
+      "id": "http-get-data-csv",
+      "name": "HTTP Request - Baixar data.csv",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        420,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Node: Processar e Cruzar Dados (RPA + Catálogo de Investimentos)\nconst webhookData = $('Webhook Clientes (RPA Trigger)').first().json;\nconst csvRaw = $('HTTP Request - Baixar data.csv').first().json.data || $('HTTP Request - Baixar data.csv').first().data;\n\n// Fallback de catálogo caso a requisição HTTP retorne texto cru\nlet produtos = [];\nif (typeof csvRaw === 'string') {\n  const linhas = csvRaw.trim().split('\\n');\n  const headers = linhas[0].split(',').map(h => h.trim());\n  for (let i = 1; i < linhas.length; i++) {\n    const vals = linhas[i].split(',').map(v => v.trim());\n    if (vals.length >= 4) {\n      produtos.push({\n        perfil: vals[0],\n        produto: vals[1],\n        minimo: parseFloat(vals[2]) || 0,\n        rentabilidade: vals[3]\n      });\n    }\n  }\n} else {\n  // Catálogo padrão embutido como fallback de resiliência\n  produtos = [\n    { perfil: \"Conservador\", produto: \"Poupança\", minimo: 100, rentabilidade: \"6.2%\" },\n    { perfil: \"Conservador\", produto: \"CDB Liquidez Diária\", minimo: 1000, rentabilidade: \"12.5%\" },\n    { perfil: \"Conservador\", produto: \"Tesouro Selic\", minimo: 500, rentabilidade: \"13.0%\" },\n    { perfil: \"Moderado\", produto: \"CDB Prefixado\", minimo: 1000, rentabilidade: \"14.0%\" },\n    { perfil: \"Moderado\", produto: \"Fundo Multimercado\", minimo: 5000, rentabilidade: \"16.0%\" },\n    { perfil: \"Moderado\", produto: \"Tesouro IPCA+\", minimo: 1000, rentabilidade: \"IPCA+6.0%\" },\n    { perfil: \"Arrojado\", produto: \"Ações ETF\", minimo: 500, rentabilidade: \"Variável\" },\n    { perfil: \"Arrojado\", produto: \"Fundo de Ações\", minimo: 10000, rentabilidade: \"Variável\" },\n    { perfil: \"Arrojado\", produto: \"Criptomoedas\", minimo: 100, rentabilidade: \"Variável\" }\n  ];\n}\n\nconst clientes = webhookData.body?.clientes || webhookData.clientes || [\n  { id: 1, nome: \"Ana Silva\", email: \"ana@email.com\", saldo_formatado: \"R$ 12.500,00\", saldo: 12500, perfil: \"Conservador\" },\n  { id: 2, nome: \"Bruno Lima\", email: \"bruno@email.com\", saldo_formatado: \"R$ 3.200,00\", saldo: 3200, perfil: \"Moderado\" },\n  { id: 3, nome: \"Carla Souza\", email: \"carla@email.com\", saldo_formatado: \"R$ 28.900,00\", saldo: 28900, perfil: \"Arrojado\" }\n];\n\nconst resultados = [];\n\nfor (const cliente of clientes) {\n  // Casar investimentos por perfil de risco e limite de saldo mínimo\n  const produtosCompativeis = produtos.filter(p => {\n    const perfilMatch = p.perfil.toLowerCase() === cliente.perfil.toLowerCase();\n    const saldoPermite = cliente.saldo >= p.minimo;\n    return perfilMatch && saldoPermite;\n  });\n\n  const promptLLM = `Você é um Consultor de Investimentos e Assessor Financeiro Sênior.\nAnalise o perfil e o capital disponível do cliente abaixo e elabore uma recomendação de alocação de carteira clara, técnica e didática.\n\nDADOS DO CLIENTE:\n- Nome: ${cliente.nome}\n- Saldo Disponível: ${cliente.saldo_formatado} (R$ ${cliente.saldo.toFixed(2)})\n- Perfil de Risco: ${cliente.perfil}\n\nPRODUTOS SELECIONADOS NO CATÁLOGO PARA ESTE PERFIL E ORÇAMENTO:\n${produtosCompativeis.map(p => `- ${p.produto} | Aporte Mínimo: R$ ${p.minimo.toFixed(2)} | Rentabilidade Esperada: ${p.rentabilidade}`).join('\\n')}\n\nINSTRUÇÕES PARA O RELATÓRIO:\n1. Faça uma saudação calorosa e personalizada ao cliente.\n2. Explique a estratégia recomendada com base no perfil (${cliente.perfil}) e nos objetivos de preservação ou multiplicação de patrimônio.\n3. Apresente uma sugestão percentual de divisão do capital entre os produtos listados.\n4. Finalize com orientações práticas de próximos passos e um disclaimer regulatório prudente.`;\n\n  resultados.push({\n    json: {\n      ...cliente,\n      produtos_compativeis: produtosCompativeis,\n      total_produtos_sugeridos: produtosCompativeis.length,\n      prompt_llm: promptLLM\n    }\n  });\n}\n\nreturn resultados;"
+      },
+      "id": "code-match-investimentos",
+      "name": "Code - Casar Clientes & Investimentos",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        640,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.groq.com/openai/v1/chat/completions",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer ={{ $env.GROQ_API_KEY || 'SUA_CHAVE_GROQ_AQUI' }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\\n  \\\"model\\\": \\\"llama-3.1-8b-instant\\\",\\n  \\\"messages\\\": [\\n    {\\\"role\\\": \\\"system\\\", \\\"content\\\": \\\"Você é um assistente sênior de investimentos em IA. Seja direto, didático e profissional.\\\"},\\n    {\\\"role\\\": \\\"user\\\", \\\"content\\\": {{ JSON.stringify($json.prompt_llm) }}}\\n  ],\\n  \\\"temperature\\\": 0.6\\n}",
+        "options": {}
+      },
+      "id": "groq-llm-generator",
+      "name": "Groq LLM (Llama 3 - Consultor IA)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        860,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Node: Montar Template de Briefing de Email HTML\nconst itemAnterior = $('Code - Casar Clientes & Investimentos').item.json;\nconst llmResponse = $json;\n\n// Extrai a resposta da IA ou define um parecer padrão\nlet parecerIA = \"\";\nif (llmResponse.choices && llmResponse.choices.length > 0) {\n  parecerIA = llmResponse.choices[0].message.content;\n} else if (llmResponse.parecer_ia) {\n  parecerIA = llmResponse.parecer_ia;\n} else {\n  parecerIA = `Prezado(a) ${itemAnterior.nome},\\n\\nCom base em seu saldo de ${itemAnterior.saldo_formatado} e perfil ${itemAnterior.perfil}, recomendamos a distribuição estratégica nos ativos selecionados com foco em rentabilidade balanceada e gestão de risco.`;\n}\n\n// Converte quebras de linha em parágrafos HTML\nconst parecerHtml = parecerIA.split('\\n\\n').map(p => `<p style=\"margin-bottom: 12px; line-height: 1.6; color: #374151;\">${p.replace(/\\n/g, '<br>')}</p>`).join('');\n\n// Monta as linhas da tabela de investimentos\nconst produtosRows = itemAnterior.produtos_compativeis.map(p => `\n  <tr style=\"border-bottom: 1px solid #e5e7eb;\">\n    <td style=\"padding: 12px 16px; font-weight: 600; color: #111827;\">${p.produto}</td>\n    <td style=\"padding: 12px 16px; color: #4b5563;\">R$ ${p.minimo.toFixed(2)}</td>\n    <td style=\"padding: 12px 16px; font-weight: 700; color: #059669;\">${p.rentabilidade}</td>\n  </tr>\n`).join('');\n\n// Cor do badge por perfil\nlet corBadge = \"#10b981\"; // Conservador\nif (itemAnterior.perfil.toLowerCase() === \"moderado\") corBadge = \"#f59e0b\";\nif (itemAnterior.perfil.toLowerCase() === \"arrojado\") corBadge = \"#ef4444\";\n\nconst htmlEmail = `\n<!DOCTYPE html>\n<html>\n<head>\n  <meta charset=\"utf-8\">\n  <title>Análise Personalizada de Investimentos</title>\n</head>\n<body style=\"font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #f3f4f6; margin: 0; padding: 24px;\">\n  <div style=\"max-width: 650px; margin: 0 auto; background-color: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.08);\">\n    \n    <!-- Cabeçalho -->\n    <div style=\"background: linear-gradient(135deg, #1e3a8a 0%, #3b82f6 100%); padding: 32px 24px; text-align: center; color: #ffffff;\">\n      <h1 style=\"margin: 0 0 8px 0; font-size: 24px; font-weight: 700;\">Assessoria de Investimentos Inteligente</h1>\n      <p style=\"margin: 0; font-size: 15px; opacity: 0.9;\">Relatório personalizado de alocação patrimonial gerado por IA</p>\n    </div>\n\n    <!-- Dados do Cliente -->\n    <div style=\"padding: 24px; border-bottom: 1px solid #e5e7eb; background-color: #f9fafb;\">\n      <div style=\"display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;\">\n        <span style=\"font-size: 18px; font-weight: 600; color: #1f2937;\">Olá, ${itemAnterior.nome}!</span>\n        <span style=\"background-color: ${corBadge}; color: #ffffff; padding: 4px 14px; border-radius: 9999px; font-size: 13px; font-weight: 600; text-transform: uppercase;\">\n          ${itemAnterior.perfil}\n        </span>\n      </div>\n      <p style=\"margin: 0; color: #4b5563; font-size: 14px;\">\n        Saldo Total Disponível para Aporte: <strong style=\"color: #059669; font-size: 16px;\">${itemAnterior.saldo_formatado}</strong>\n      </p>\n    </div>\n\n    <!-- Oportunidades Selecionadas -->\n    <div style=\"padding: 24px;\">\n      <h3 style=\"margin: 0 0 16px 0; font-size: 17px; color: #1f2937; border-left: 4px solid #3b82f6; padding-left: 8px;\">\n        Produtos de Investimento Selecionados para Seu Perfil\n      </h3>\n      <table style=\"width: 100%; border-collapse: collapse; text-align: left; font-size: 14px; background-color: #ffffff; border: 1px solid #e5e7eb; border-radius: 8px;\">\n        <thead>\n          <tr style=\"background-color: #f8fafc; border-bottom: 2px solid #e2e8f0;\">\n            <th style=\"padding: 10px 16px; color: #64748b;\">Produto</th>\n            <th style=\"padding: 10px 16px; color: #64748b;\">Aporte Mínimo</th>\n            <th style=\"padding: 10px 16px; color: #64748b;\">Rentabilidade</th>\n          </tr>\n        </thead>\n        <tbody>\n          ${produtosRows}\n        </tbody>\n      </table>\n    </div>\n\n    <!-- Parecer da IA -->\n    <div style=\"padding: 0 24px 24px 24px;\">\n      <div style=\"background-color: #eff6ff; border-left: 4px solid #2563eb; padding: 20px; border-radius: 0 8px 8px 0;\">\n        <h4 style=\"margin: 0 0 12px 0; color: #1e40af; font-size: 15px; font-weight: 700;\">\n          💡 Recomendação e Análise do Consultor IA\n        </h4>\n        <div style=\"font-size: 14px;\">\n          ${parecerHtml}\n        </div>\n      </div>\n    </div>\n\n    <!-- Rodapé & Disclaimer -->\n    <div style=\"padding: 20px 24px; background-color: #f8fafc; border-top: 1px solid #e2e8f0; font-size: 12px; color: #64748b; text-align: center;\">\n      <p style=\"margin: 0 0 8px 0;\">\n        Este relatório foi gerado automaticamente pelo fluxo <strong>RPA + n8n + Inteligência Artificial Generativa</strong>.\n      </p>\n      <p style=\"margin: 0; font-size: 11px; color: #94a3b8;\">\n        Aviso Legal: As rentabilidades informadas são indicativas e não representam garantia de ganhos futuros. Consulte sempre seu assessor financeiro credenciado antes de tomar decisões de aporte.\n      </p>\n    </div>\n\n  </div>\n</body>\n</html>\n`;\n\nreturn {\n  json: {\n    ...itemAnterior,\n    assunto_email: `📋 Análise Personalizada de Investimentos | ${itemAnterior.nome}`,\n    email_html: htmlEmail,\n    parecer_ia: parecerIA\n  }\n};"
+      },
+      "id": "code-template-email",
+      "name": "Code - Montar Briefing Email HTML",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1080,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $json.email }}",
+        "subject": "={{ $json.assunto_email }}",
+        "message": "={{ $json.parecer_ia }}",
+        "options": {
+          "htmlMessage": "={{ $json.email_html }}"
+        }
+      },
+      "id": "gmail-send-briefing",
+      "name": "Gmail - Enviar Briefing ao Cliente",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        1300,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook Clientes (RPA Trigger)": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request - Baixar data.csv",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request - Baixar data.csv": {
+      "main": [
+        [
+          {
+            "node": "Code - Casar Clientes & Investimentos",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code - Casar Clientes & Investimentos": {
+      "main": [
+        [
+          {
+            "node": "Groq LLM (Llama 3 - Consultor IA)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Groq LLM (Llama 3 - Consultor IA)": {
+      "main": [
+        [
+          {
+            "node": "Code - Montar Briefing Email HTML",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code - Montar Briefing Email HTML": {
+      "main": [
+        [
+          {
+            "node": "Gmail - Enviar Briefing ao Cliente",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}
