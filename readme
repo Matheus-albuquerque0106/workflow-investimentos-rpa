@@ -1,0 +1,31 @@
+# 🏦 Assistente de Investimentos com IA e RPA (n8n + Python + Groq)
+
+<p align="center">
+  <img src="https://img.shields.io/badge/Status-Conclu%C3%ADdo-success?style=for-the-badge" alt="Status Concluído">
+  <img src="https://img.shields.io/badge/Python-3.10%2B-blue?style=for-the-badge&logo=python" alt="Python">
+  <img src="https://img.shields.io/badge/n8n-Workflow%20Automation-FF6D5A?style=for-the-badge&logo=n8n" alt="n8n">
+  <img src="https://img.shields.io/badge/Groq-Llama%203.1-f55036?style=for-the-badge" alt="Groq Llama 3">
+  <img src="https://img.shields.io/badge/DIO-Lab%20Project-FF0040?style=for-the-badge" alt="DIO Lab">
+</p>
+
+---
+
+## 📌 Visão Geral do Projeto
+
+Este projeto consiste no desenvolvimento e implementação de uma solução ponta a ponta para uma **Assessoria Financeira Automatizada com Inteligência Artificial e RPA (Robotic Process Automation)**, proposto no bootcamp da **Digital Innovation One (DIO)**.
+
+O objetivo é coletar dados de investidores a partir de uma plataforma bancária simulada, orquestrar a lógica de elegibilidade e regras de negócio de investimentos no **n8n**, acionar um modelo de linguagem de ponta (**Groq / Llama 3**) para emitir recomendações personalizadas por perfil de risco e enviar relatórios executivos em HTML via **Gmail**.
+
+---
+
+## 🏗️ Arquitetura da Solução
+
+```mermaid
+flowchart LR
+    A[🌐 Portal Financeiro<br>HTML / #clientes] -->|Web Scraping<br>BeautifulSoup| B[🐍 Script Python / Colab<br>extrair_clientes.py]
+    B -->|HTTP POST Payload| C[⚡ n8n Webhook Trigger<br>/webhook/clientes]
+    C --> D[📥 HTTP Request<br>Baixar data.csv]
+    D --> E[⚙️ Code Node<br>Filtrar Perfil & Saldo Mínimo]
+    E --> F[🧠 Groq API / LLM<br>Llama 3 Consultor Financeiro]
+    F --> G[🎨 Code Node<br>Montar Template Email HTML]
+    G --> H[📧 Gmail Node<br>Envio de Briefing Personalizado]
